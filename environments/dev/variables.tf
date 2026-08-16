@@ -1,7 +1,7 @@
 variable "project" {
-  description = "プロジェクト名(タグ・リソース名prefixに使用)"
+  description = "プロジェクト名(タグ・リソース名prefixに使用)。ALB/ターゲットグループ名は32文字制限があるため、'{project}-{environment}'が25文字以内に収まる長さにすること"
   type        = string
-  default     = "cloudtech-academy-sprint3"
+  default     = "academy-sprint3"
 }
 
 variable "environment" {
