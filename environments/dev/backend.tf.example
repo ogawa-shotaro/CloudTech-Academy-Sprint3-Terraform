@@ -1,0 +1,19 @@
+# このファイルは現在使われていません(.tf拡張子ではないためTerraformには読み込まれない)。
+# リモートstate(S3 + DynamoDBロック)を有効化する際の参考テンプレートです。
+# 詳しい説明はREADME.mdの「state管理(backend)について」を参照してください。
+#
+# 有効化する手順:
+#   1. S3バケットとDynamoDBテーブルを事前に作成する
+#   2. 以下をコピーして `backend.tf` という名前で保存する
+#   3. bucket / dynamodb_table の値を実際の名前に書き換える
+#   4. `terraform init` を再実行する
+
+# terraform {
+#   backend "s3" {
+#     bucket         = "your-tfstate-bucket"
+#     key            = "environments/dev/terraform.tfstate"
+#     region         = "ap-northeast-1"
+#     dynamodb_table = "your-tfstate-lock-table"
+#     encrypt        = true
+#   }
+# }

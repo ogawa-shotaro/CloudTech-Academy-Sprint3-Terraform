@@ -5,7 +5,7 @@ resource "aws_lb" "this" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
-  # 不正なHTTPヘッダを含むリクエストを拒否する
+  # [セキュリティ] 不正なHTTPヘッダを含むリクエストを拒否する(HTTPリクエストスミグリング等の対策)
   drop_invalid_header_fields = true
 
   # dev環境のため誤操作での削除を許容する(即時terraform destroy可能にする)

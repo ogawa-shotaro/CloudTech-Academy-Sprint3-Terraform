@@ -1,3 +1,6 @@
+# [Terraform構文] `data`ブロック: 新しいリソースを作るのではなく、既存の情報を「参照」するための構文。
+# ここではAWSが管理しているSSM Parameter Storeの値を読み取り、常に最新のAmazon Linux 2023
+# AMI IDを取得している(AMI IDを直接ハードコードすると、新しいAMIが出るたびに書き換えが必要になるため)。
 data "aws_ssm_parameter" "amazon_linux_2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
@@ -10,7 +13,9 @@ resource "aws_launch_template" "api" {
   user_data              = base64encode(file("${path.module}/templates/userdata.sh"))
   vpc_security_group_ids = [aws_security_group.api.id]
 
-  # IMDSv2を必須化する
+  # [セキュリティ] IMDSv2を必須化する。EC2にはIAMロールの認証情報等を取得できる
+  # メタデータサービス(169.254.169.254)があるが、旧方式(IMDSv1)はSSRF攻撃で
+  # その認証情報を盗まれるリスクがある。IMDSv2はトークン必須化でこれを防ぐ。
   metadata_options {
     http_tokens = "required"
   }
@@ -20,7 +25,8 @@ resource "aws_launch_template" "api" {
 
     ebs {
       volume_type = "gp3"
-      encrypted   = true
+      # [セキュリティ] ルートボリューム(OSディスク)を暗号化する。
+      encrypted = true
     }
   }
 
@@ -34,7 +40,9 @@ resource "aws_launch_template" "api" {
 
 # Auto Scaling Group: 通常min_size台、CPU負荷に応じて最大max_size台まで自動増減する
 resource "aws_autoscaling_group" "api" {
-  name                = "${local.name_prefix}-api-asg"
+  name = "${local.name_prefix}-api-asg"
+  # [Terraform構文] `[*]`はsplat式。リストの各要素から`.id`だけを取り出して
+  # 配列にする(`aws_subnet.private` = privateサブネット2つのリスト → IDだけの配列に変換)。
   vpc_zone_identifier = aws_subnet.private[*].id
   target_group_arns   = [aws_lb_target_group.api.arn]
 
@@ -50,6 +58,10 @@ resource "aws_autoscaling_group" "api" {
     version = "$Latest"
   }
 
+  # [Terraform構文] dynamic block: Auto Scaling Groupの`tag`は(他のリソースの`tags = {...}`と違い)
+  # 1つ1つ`tag { key = ... value = ... }`というブロックとして書く仕様。
+  # タグの数だけこのブロックを手書きするのは大変なので、`dynamic`でmap(common_tags)を
+  # 展開してブロックを自動生成している。`for_each`で回している最中の1個分の要素が`tag`という名前で使える。
   dynamic "tag" {
     for_each = merge(local.common_tags, { Name = "${local.name_prefix}-api" })
     content {
