@@ -12,6 +12,7 @@
    - `versions.tf`(`required_version` / `required_providers` は下限指定 `>= x.y` とする)
    - `README.md`(用途、入出力一覧、セキュリティ上の注意点)
 3. セキュアデフォルト(暗号化・パブリックアクセス禁止・ログ有効化等)を明示的に書く。
+   - `main.tf` はモジュールの主要リソースのみを置き、セキュリティグループ・IAM・フローログ関連など性質の異なるリソースは `security_group.tf` / `iam.tf` / `flow_logs.tf` のように用途別のファイルに分割してよい(Terraformは同一ディレクトリ内の`.tf`ファイルをすべて結合して読み込むため、ファイル名は自由でリソースの依存関係にも影響しない)。1ファイルが肥大化してリソースの所在が分かりにくくなる場合は積極的に分割すること。
 4. 機密情報(パスワード等)を扱うモジュールは、Terraformで生成・平文管理しない。AWS Secrets Manager等の参照方式、またはRDSの `manage_master_user_password = true` を使う([../docs/05_development_guidelines.md](../docs/05_development_guidelines.md)参照)。
 5. 追加後は `make checkov` / `make tflint` で確認する。
 
