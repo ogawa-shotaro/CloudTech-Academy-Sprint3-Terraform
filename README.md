@@ -46,7 +46,6 @@
         ├── variables.tf        … 環境固有値(リージョン/CIDR/AZ/インスタンスタイプ等)
         ├── outputs.tf          … ALBのDNS名など動作確認用の出力
         ├── backend.tf.example  … リモートstate(S3)を有効化する際の参考テンプレート(現状未使用)
-        ├── golden_ami_launch_template.tf.example … Golden AMI方式にする場合の参考例(現状未使用)
         ├── versions.tf         … Terraform/AWSプロバイダのバージョン制約
         └── templates/userdata.sh … おみくじAPI(Go)を起動するユーザデータスクリプト
 ```
