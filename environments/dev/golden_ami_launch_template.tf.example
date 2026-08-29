@@ -12,24 +12,38 @@
 # それを起動するだけにする、という設計がより望ましいです。
 # 参考として、その場合のLaunch Templateがどう変わるかを以下に示します。
 #
-# 前提(事前に1回だけ行う作業):
-#   1. Packer や EC2 Image Builder を使い、素のAmazon Linux 2023を起動して
-#      templates/userdata.sh と同じ内容のセットアップを実行する
-#   2. そのインスタンスをそのままAMI化する(aws ec2 create-image 相当)
-#   3. 出来上がったカスタムAMIのIDを控えておく(下記の image_id に使う)
+# 前提(事前に1回だけ行う作業。Packer/EC2 Image Builderのような専用ツールは使わず、
+# 手動でAMI化するだけの、今回の検証規模には十分シンプルな方法):
+#   1. 動作確認済みのEC2インスタンス(userdata.shの実行が終わり、/healthが
+#      正常に返ってきている状態)を1台用意する。今動いているASGのインスタンスを
+#      そのまま使ってよい。
+#   2. そのインスタンスからAMIを作成する。
+#        AWSコンソール: EC2 → インスタンス → 対象を選択 →
+#          [アクション] → [イメージとテンプレート] → [イメージを作成]
+#        AWS CLI:
+#          aws ec2 create-image \
+#            --instance-id i-xxxxxxxxxxxxxxxxx \
+#            --name "omikuji-api-golden-$(date +%Y%m%d)" \
+#            --no-reboot
+#        (--no-reboot: 本来は再起動を挟んでイメージ化する方が安全だが、
+#         このアプリはステートレスなWebサーバなので再起動無しで問題ない)
+#   3. 数分後に発行されるカスタムAMIのID(ami-xxxxxxxxxxxxxxxxx)を控え、
+#      下記の image_id に設定する。
 #
 # トレードオフ:
 #   [メリット]   起動時はOS起動+systemdサービス自動起動だけなので数十秒で
 #                ヘルスチェックが通る(現状は数分かかる)。外部リポジトリ
 #                (dnf/goの取得先)の障害・遅延の影響も受けなくなる。
-#   [デメリット] アプリのコードを変更するたびに「AMIを作り直す→この
-#                image_idを更新する→apply」という追加のリリース作業が
-#                必要になる(現状はuserdata.shを直すだけで次回起動から反映される)。
+#   [デメリット] アプリのコードを変更するたびに、上記1〜3の手順を手動で
+#                やり直して新しいAMIを作り、この image_id を更新する必要が
+#                ある(現状はuserdata.shを直すだけで次回起動から反映される)。
+#                変更頻度が高くなる場合は、この作業をPacker等で自動化する
+#                ことを検討する。
 # ---------------------------------------------------------------------------
 
 resource "aws_launch_template" "api_golden_ami" {
   name          = "${local.name_prefix}-api-lt-golden"
-  image_id      = "ami-0123456789abcdef0" # ← 事前にビルドしたGolden AMIのIDに差し替える
+  image_id      = "ami-0123456789abcdef0" # ← 上記手順で作成したカスタムAMIのIDに差し替える
   instance_type = var.api_instance_type
 
   # userdataは不要になる(アプリはGolden AMI内で既にビルド・systemd登録済みのため)。
