@@ -46,6 +46,7 @@
         ├── variables.tf        … 環境固有値(リージョン/CIDR/AZ/インスタンスタイプ等)
         ├── outputs.tf          … ALBのDNS名など動作確認用の出力
         ├── backend.tf.example  … リモートstate(S3)を有効化する際の参考テンプレート(現状未使用)
+        ├── golden_ami_launch_template.tf.example … Golden AMI方式にする場合の参考例(現状未使用)
         ├── versions.tf         … Terraform/AWSプロバイダのバージョン制約
         └── templates/userdata.sh … おみくじAPI(Go)を起動するユーザデータスクリプト
 ```
@@ -55,7 +56,7 @@
 ## 設計ポイント
 
 - **モジュール化はせず、1つの環境に直接記述**: 現時点では`dev`環境1つしか無く、他プロジェクトでの再利用も予定していないため、モジュール分割による抽象化コストよりも「上から下に読めば全体が分かる」シンプルさを優先している。
-- **セキュリティグループはシンプルな`ingress`/`egress`インラインブロック方式**: 1つの`aws_security_group`リソースの中にルールを直接書く、Terraformで最も基本的な書き方を採用している。
+- **セキュリティグループのルールは独立したリソース(`aws_vpc_security_group_ingress_rule`/`egress_rule`)で書く**: ALB用SGとAPIサーバ用SGは互いのSGを参照し合う関係にあるため、`aws_security_group`本体に`ingress`/`egress`を直接書く「インラインブロック方式」だと循環参照(ALBを作るにはAPIのIDが要り、APIを作るにはALBのIDが要る)になりTerraformが解決できない。ルールを別リソースにすることで、先に両方のSG(箱)を作ってから、後でお互いを参照するルールを追加でき、循環を避けられる。
 - **`asg`は`depends_on = [aws_nat_gateway.this]`を明示**: EC2のユーザデータ(`dnf update`等)がインターネット到達性を必要とするため、NAT Gatewayが先に用意されてからEC2を起動するよう順序を保証している。
 - **共通タグ**: `local.common_tags`(`Project`/`Environment`/`ManagedBy`)を全リソースに付与。
 - **命名の長さ制約への配慮**: `project`変数の説明に、ALB/ターゲットグループ名のAWS上の32文字制限(`{project}-{environment}`が25文字以内)を明記している。
@@ -97,7 +98,7 @@ Terraformは「今どのAWSリソースを管理しているか」を`terraform.
   - デフォルトセキュリティグループを何もルール無しにして塞ぐ
   - `map_public_ip_on_launch = false`、EBS暗号化(`encrypted = true`)などの明示的な指定
   - IMDSv2の必須化(`http_tokens = "required"`)
-  - セキュリティグループの許可先をIPアドレスではなく他のセキュリティグループIDで指定する
+  - セキュリティグループの許可先をIPアドレスではなく他のセキュリティグループIDで指定する(`aws_vpc_security_group_ingress_rule`/`egress_rule`では`referenced_security_group_id`という属性名になる。同様に`cidr_blocks`→`cidr_ipv4`、`protocol`→`ip_protocol`など、旧来のインラインブロックとは属性名が少し異なる点に注意)
   - 各セキュリティグループルールへの`description`付与
 
 つまり、見慣れない書き方の多くは「checkov/tflintを入れたから追加された特殊な記法」ではなく、**Terraform自体の標準機能**か、**checkov/tflintが無くても本来書くべきセキュリティ設定を、ツール無しでも満たすように明示的に書いたもの**です。ツールの設定ファイル自体は前述のとおり今は未コミットですが、書き方の基準は変えていません。

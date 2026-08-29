@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# このファイルは参考用です(.tf拡張子ではないためTerraformには一切読み込まれません)。
+#
+# 現状の asg.tf は、EC2起動のたびに templates/userdata.sh を実行し、
+# dnf update / Goのインストール / go build をゼロから行っています。
+# これは Sprint3 の要件「初期構築はユーザデータで行う」に沿った実装であり、
+# 本プロジェクトではこのまま(userdata方式)を使用します。
+#
+# 一方で、本番運用のようにスケールアウトの速度・信頼性を重視する場合は、
+# 「事前にGo・アプリのビルド済みバイナリ・systemdサービス(enabled)まで
+# 全部入れた状態のAMI(Golden AMI)」を1回だけ作っておき、EC2起動時は
+# それを起動するだけにする、という設計がより望ましいです。
+# 参考として、その場合のLaunch Templateがどう変わるかを以下に示します。
+#
+# 前提(事前に1回だけ行う作業):
+#   1. Packer や EC2 Image Builder を使い、素のAmazon Linux 2023を起動して
+#      templates/userdata.sh と同じ内容のセットアップを実行する
+#   2. そのインスタンスをそのままAMI化する(aws ec2 create-image 相当)
+#   3. 出来上がったカスタムAMIのIDを控えておく(下記の image_id に使う)
+#
+# トレードオフ:
+#   [メリット]   起動時はOS起動+systemdサービス自動起動だけなので数十秒で
+#                ヘルスチェックが通る(現状は数分かかる)。外部リポジトリ
+#                (dnf/goの取得先)の障害・遅延の影響も受けなくなる。
+#   [デメリット] アプリのコードを変更するたびに「AMIを作り直す→この
+#                image_idを更新する→apply」という追加のリリース作業が
+#                必要になる(現状はuserdata.shを直すだけで次回起動から反映される)。
+# ---------------------------------------------------------------------------
+
+resource "aws_launch_template" "api_golden_ami" {
+  name          = "${local.name_prefix}-api-lt-golden"
+  image_id      = "ami-0123456789abcdef0" # ← 事前にビルドしたGolden AMIのIDに差し替える
+  instance_type = var.api_instance_type
+
+  # userdataは不要になる(アプリはGolden AMI内で既にビルド・systemd登録済みのため)。
+  # アプリコードは INSTANCE_ID 環境変数が無ければ os.Hostname() にフォールバックする
+  # 実装になっているので、userdataでのインスタンスID注入も省略できる。
+  # user_data は指定しない
+
+  vpc_security_group_ids = [aws_security_group.api.id]
+
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_type = "gp3"
+      encrypted   = true
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(local.common_tags, { Name = "${local.name_prefix}-api-golden" })
+  }
+
+  tags = local.common_tags
+}
