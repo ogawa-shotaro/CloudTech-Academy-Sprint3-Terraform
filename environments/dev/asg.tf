@@ -71,8 +71,14 @@ resource "aws_autoscaling_group" "api" {
     }
   }
 
-  # NAT Gateway経由の経路が確立してからEC2を起動する
-  depends_on = [aws_nat_gateway.this]
+  # [問題点] depends_onがaws_nat_gateway.thisだけだと、「NAT Gatewayという“モノ”ができたこと」しか
+  # 保証されない。EC2が実際にインターネットへ出られるかどうかを決めるのは、プライベートサブネットの
+  # ルートテーブルがNAT Gatewayへの経路を持ち、かつそのサブネットに紐付いていること
+  # (aws_route_table_association.private)であり、これは別リソースなので依存関係グラフ上は
+  # 保証されていなかった(NAT Gateway完成と同時にEC2起動が始まり得る)。
+  # [修正] aws_route_table_association.privateもdepends_onに加え、プライベートサブネットの経路が
+  # 実際に確立してからEC2(userdata)が動き出すことを明示的に保証する。
+  depends_on = [aws_nat_gateway.this, aws_route_table_association.private]
 }
 
 # CPU使用率がしきい値を超えたらスケールアウト、下回れば自動でスケールインする
